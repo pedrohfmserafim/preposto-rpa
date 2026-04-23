@@ -138,31 +138,16 @@ def _auto_login(page, log):
             "Adicione-as nas variáveis de ambiente do Render."
         )
 
-    # Detecta se é login Microsoft/SSO ou login direto Elaw
-    if "microsoftonline" in page.url or "login.microsoft" in page.url:
-        log("Login via Microsoft SSO detectado...")
-        # TODO: verificar seletores no login Microsoft real
-        page.fill("input[type='email']", elaw_user, timeout=PAGE_TIMEOUT)
-        page.click("input[type='submit']", timeout=PAGE_TIMEOUT)
-        page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT)
-        page.fill("input[type='password']", elaw_pass, timeout=PAGE_TIMEOUT)
-        page.click("input[type='submit']", timeout=PAGE_TIMEOUT)
-        # "Manter conectado?" — clicar Não
-        try:
-            page.click("input[value='No'], input[id='idBtn_Back']", timeout=5_000)
-        except PWTimeout:
-            pass
-    else:
-        log("Login direto Elaw detectado...")
-        # TODO: verificar seletores no login direto do Elaw
-        page.fill("#username, input[name='username'], input[name='user']",
-                  elaw_user, timeout=PAGE_TIMEOUT)
-        page.fill("#password, input[name='password'], input[name='pass']",
-                  elaw_pass, timeout=PAGE_TIMEOUT)
-        page.click("button[type='submit'], input[type='submit']", timeout=PAGE_TIMEOUT)
+    log("Preenchendo credenciais Elaw...")
+    page.fill("#username", elaw_user, timeout=PAGE_TIMEOUT)
+    page.fill("#authKey", elaw_pass, timeout=PAGE_TIMEOUT)
+    page.click("button:has-text('Acessar')", timeout=PAGE_TIMEOUT)
 
-    page.wait_for_url(f"**{ELAW_URL}/**", timeout=30_000)
     page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT)
+
+    if _is_login_page(page):
+        raise Exception("Login falhou — verifique ELAW_USER e ELAW_PASS no Render.")
+
     log("✅ Login concluído.")
 
 
