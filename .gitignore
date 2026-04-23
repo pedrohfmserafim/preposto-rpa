@@ -1,0 +1,9 @@
+uploads/
+output/
+chrome_profile/
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.xlsx
+!requirements.txt
