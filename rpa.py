@@ -199,9 +199,13 @@ def _is_login_page(page) -> bool:
     if any(k in url for k in ("login", "signin", "sso", "auth", "microsoftonline")):
         return True
     try:
-        return bool(page.evaluate(
-            "!!(document.getElementById('username') || document.getElementById('authKey'))"
-        ))
+        return bool(page.evaluate("""(() => {
+            const isVisible = el => el && el.offsetParent !== null
+                && getComputedStyle(el).display !== 'none'
+                && getComputedStyle(el).visibility !== 'hidden';
+            return isVisible(document.getElementById('username'))
+                || isVisible(document.getElementById('authKey'));
+        })()"""))
     except Exception:
         return False
 
