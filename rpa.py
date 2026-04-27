@@ -54,7 +54,7 @@ def run_automation(rows: list[dict], log, report_path: Path):
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
 
         log("Abrindo Elaw Carrefour...")
-        page.goto(ELAW_URL, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+        page.goto(ELAW_URL, wait_until="networkidle", timeout=30_000)
 
         if _is_login_page(page):
             if IS_SERVER:
@@ -141,20 +141,26 @@ def _auto_login(page, log):
             "Adicione-as nas variáveis de ambiente do Render."
         )
 
+    # Espera os campos estarem prontos (headless pode renderizar após domcontentloaded)
+    page.wait_for_selector("#username", state="visible", timeout=PAGE_TIMEOUT)
+    page.wait_for_selector("#authKey",  state="visible", timeout=PAGE_TIMEOUT)
+
     log("Preenchendo credenciais Elaw...")
     page.fill("#username", elaw_user, timeout=PAGE_TIMEOUT)
     page.fill("#authKey",  elaw_pass, timeout=PAGE_TIMEOUT)
 
-    clicked = page.evaluate("""(() => {
-        const btn = Array.from(document.querySelectorAll('button'))
-            .find(b => b.textContent.trim().includes('Acessar'));
-        if (btn) { btn.click(); return true; }
-        return false;
-    })()""")
-
-    if not clicked:
-        log("Botão 'Acessar' não localizado — tentando Enter...", "warn")
-        page.press("#authKey", "Enter")
+    # Tentar clicar com force=True (ignora checagens de visibilidade do Playwright)
+    try:
+        page.locator("button.ui-button").first.click(force=True, timeout=PAGE_TIMEOUT)
+    except Exception:
+        # Fallback: submeter via JS
+        page.evaluate("""(() => {
+            const btn = document.querySelector('button.ui-button') ||
+                        Array.from(document.querySelectorAll('button'))
+                            .find(b => b.textContent.trim().includes('Acessar'));
+            if (btn) btn.click();
+            else { const f = document.querySelector('form'); if (f) f.submit(); }
+        })()""")
 
     page.wait_for_load_state("networkidle", timeout=30_000)
 
