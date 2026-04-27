@@ -220,6 +220,15 @@ def debug_screenshot():
     return send_file(path, mimetype="image/png")
 
 
+@app.route("/debug-confirm-screenshot")
+@login_required
+def debug_confirm_screenshot():
+    path = Path("/tmp/debug_confirm.png")
+    if not path.exists():
+        return jsonify({"erro": "Nenhum screenshot de confirmação disponível ainda"}), 404
+    return send_file(path, mimetype="image/png")
+
+
 @app.route("/download")
 @login_required
 def download():

@@ -323,7 +323,16 @@ def _click_task_confirm(page):
         try:
             page.wait_for_selector('[id$="pgAutoPreposto_input"]', state="visible", timeout=PAGE_TIMEOUT)
         except PWTimeout:
-            raise Exception("Tela de confirmação de agendamento não carregou")
+            # Salva screenshot + URL atual para diagnóstico
+            try:
+                page.screenshot(path="/tmp/debug_confirm.png", full_page=True)
+            except Exception:
+                pass
+            current_url = page.url
+            raise Exception(
+                f"Tela de confirmação de agendamento não carregou "
+                f"(URL atual: {current_url}) — screenshot em /debug-confirm-screenshot"
+            )
 
     return "ok"
 
