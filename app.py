@@ -158,7 +158,7 @@ def logs():
     def generate():
         while True:
             try:
-                msg = _log_queue.get(timeout=25)
+                msg = _log_queue.get(timeout=8)
                 yield f"data: {msg}\n\n"
                 if json.loads(msg).get("done"):
                     break

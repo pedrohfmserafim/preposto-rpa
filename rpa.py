@@ -306,17 +306,6 @@ def _click_task_confirm(page):
     if result == "btn_nao_encontrado":
         raise Exception("Botão confirmAgendamento não encontrado na linha da tarefa")
 
-    time.sleep(1.5)
-    if "javax.faces.Token" in page.url:
-        page.evaluate("""
-            for (const row of document.querySelectorAll('tr')) {
-                if (row.textContent.includes('Indicar Preposto')) {
-                    const btn = row.querySelector('button[id*="confirmAgendamento"]');
-                    if (btn) { btn.click(); break; }
-                }
-            }
-        """)
-
     try:
         page.wait_for_url("**/agendamentoContenciosoConfirm.elaw**", timeout=PAGE_TIMEOUT)
     except PWTimeout:
