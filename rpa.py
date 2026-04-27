@@ -5,6 +5,7 @@ Notas técnicas (JSF/PrimeFaces):
 - Navegação direta por URL não funciona — usar busca global
 - Botões via JavaScript (podem estar fora do viewport)
 - Autocompletes PrimeFaces: foco via JS + digitação real (keyboard.type)
+- page.evaluate com string NÃO aceita return no top-level — usar IIFEs
 """
 
 import os
@@ -28,7 +29,6 @@ PAGE_TIMEOUT  = 15_000
 POLL_ATTEMPTS = 5
 POLL_WAIT     = 1.2
 
-# Detecta se está rodando no servidor (Render seta RENDER=true)
 IS_SERVER = bool(os.environ.get("RENDER") or os.environ.get("IS_SERVER"))
 
 
@@ -44,7 +44,6 @@ def run_automation(rows: list[dict], log, report_path: Path):
             ctx  = browser.new_context(viewport={"width": 1280, "height": 900})
             page = ctx.new_page()
         else:
-            # Local: perfil persistente para reusar sessão
             chrome_profile = str(Path(__file__).parent / "chrome_profile")
             ctx  = p.chromium.launch_persistent_context(
                 chrome_profile,
@@ -62,7 +61,7 @@ def run_automation(rows: list[dict], log, report_path: Path):
                 log("Fazendo login automático...", "info")
                 _auto_login(page, log)
             else:
-                log("⚠️ Sessão expirada — faça login no browser aberto. O RPA continuará automaticamente.", "warn")
+                log("⚠️ Sessão expirada — faça login no browser aberto.", "warn")
                 page.wait_for_url(f"**{ELAW_URL}/**", timeout=LOGIN_TIMEOUT)
                 page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT)
                 log("✅ Login detectado, iniciando automação...")
@@ -120,7 +119,6 @@ def run_automation(rows: list[dict], log, report_path: Path):
 # ── Browser helpers ───────────────────────────────────────────────────────────
 
 def _launch_server(p):
-    """Lança Chromium headless com flags adequadas para ambiente de servidor."""
     return p.chromium.launch(
         headless=True,
         args=[
@@ -134,41 +132,39 @@ def _launch_server(p):
 
 
 def _auto_login(page, log):
-    """Login automático com credenciais das variáveis de ambiente."""
     elaw_user = os.environ.get("ELAW_USER", "")
     elaw_pass = os.environ.get("ELAW_PASS", "")
 
     if not elaw_user or not elaw_pass:
         raise Exception(
-            "Variáveis ELAW_USER e ELAW_PASS não configuradas no servidor. "
+            "Variáveis ELAW_USER e ELAW_PASS não configuradas. "
             "Adicione-as nas variáveis de ambiente do Render."
         )
 
     log("Preenchendo credenciais Elaw...")
     page.fill("#username", elaw_user, timeout=PAGE_TIMEOUT)
-    page.fill("#authKey", elaw_pass, timeout=PAGE_TIMEOUT)
+    page.fill("#authKey",  elaw_pass, timeout=PAGE_TIMEOUT)
 
-    # Botão é type="button" (não submit) — clicar via JS ignora checagens de visibilidade
     clicked = page.evaluate("""(() => {
         const btn = Array.from(document.querySelectorAll('button'))
             .find(b => b.textContent.trim().includes('Acessar'));
         if (btn) { btn.click(); return true; }
         return false;
     })()""")
+
     if not clicked:
-        log("Botão 'Acessar' não encontrado via JS — tentando Enter...", "warn")
+        log("Botão 'Acessar' não localizado — tentando Enter...", "warn")
         page.press("#authKey", "Enter")
 
     page.wait_for_load_state("networkidle", timeout=30_000)
 
     if _is_login_page(page):
-        # Captura mensagem de erro do Elaw, se houver
-        err_msg = page.evaluate("""
+        err_msg = page.evaluate("""(() => {
             const el = document.querySelector(
                 '.ui-messages-error-summary, .ui-messages-error, [class*="error-msg"], .growl-message'
             );
             return el ? el.textContent.trim() : null;
-        """)
+        })()""")
         detail = f": {err_msg}" if err_msg else " — verifique ELAW_USER e ELAW_PASS no Render."
         raise Exception(f"Login falhou{detail}")
 
@@ -176,7 +172,6 @@ def _auto_login(page, log):
 
 
 def _is_login_page(page) -> bool:
-    # Checa URL E presença dos campos de login (Elaw usa URL raiz para o login)
     url = page.url.lower()
     if any(k in url for k in ("login", "signin", "sso", "auth", "microsoftonline")):
         return True
@@ -200,14 +195,14 @@ def _process_row(page, numero, nome, cpf, email, telefone):
     page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT)
     is_novo = _fill_preposto(page, nome, cpf, email, telefone)
 
-    page.evaluate("document.getElementById('btnConfirmaSim').click();")
+    page.evaluate("document.getElementById('btnConfirmaSim').click()")
     time.sleep(2)
     page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT)
 
     detail = (
         "Preposto indicado com sucesso (novo cadastro)"
-        if is_novo
-        else "Preposto indicado com sucesso"
+        if is_novo else
+        "Preposto indicado com sucesso"
     )
     return "OK", detail, is_novo
 
@@ -215,7 +210,6 @@ def _process_row(page, numero, nome, cpf, email, telefone):
 # ── Navegação ─────────────────────────────────────────────────────────────────
 
 def _navigate_to_process(page, numero):
-    # Aguarda a barra de busca estar disponível (ID JSF é dinâmico — usar seletor parcial)
     page.wait_for_selector('[id*="globaSearchAutocomplete_input"]', timeout=PAGE_TIMEOUT)
 
     for attempt in range(2):
@@ -231,12 +225,12 @@ def _navigate_to_process(page, numero):
         clicked = False
         for _ in range(POLL_ATTEMPTS):
             time.sleep(POLL_WAIT)
-            result = page.evaluate("""
+            result = page.evaluate("""(() => {
                 const panel = document.querySelector('[id$="globaSearchAutocomplete_panel"]');
                 const items = panel ? panel.querySelectorAll('li') : [];
                 if (items.length > 0) { items[0].click(); return 'clicado'; }
                 return 'vazio';
-            """)
+            })()""")
             if result == "clicado":
                 clicked = True
                 break
@@ -258,7 +252,7 @@ def _navigate_to_process(page, numero):
 # ── Tarefa ────────────────────────────────────────────────────────────────────
 
 def _click_task_confirm(page):
-    result = page.evaluate("""
+    result = page.evaluate("""(() => {
         for (const row of document.querySelectorAll('tr')) {
             if (row.textContent.includes('Indicar Preposto')) {
                 const btn = row.querySelector('button[id*="confirmAgendamento"]');
@@ -267,7 +261,7 @@ def _click_task_confirm(page):
             }
         }
         return 'tarefa_nao_encontrada';
-    """)
+    })()""")
 
     if result == "tarefa_nao_encontrada":
         return "ja_confirmado"
@@ -275,7 +269,6 @@ def _click_task_confirm(page):
     if result == "btn_nao_encontrado":
         raise Exception("Botão confirmAgendamento não encontrado na linha da tarefa")
 
-    # Padrão JSF: verificar se precisa de segundo clique
     time.sleep(1.5)
     if "javax.faces.Token" in page.url:
         page.evaluate("""
@@ -327,12 +320,12 @@ def _type_and_poll_autocomplete(page, search_term) -> list | None:
 
     for _ in range(POLL_ATTEMPTS):
         time.sleep(POLL_WAIT)
-        items = page.evaluate("""
+        items = page.evaluate("""(() => {
             const panel = document.querySelector('[id$="pgAutoPreposto_panel"]');
             if (!panel) return null;
             const items = Array.from(panel.querySelectorAll('li')).map(i => i.textContent.trim());
             return items.length > 0 ? items : null;
-        """)
+        })()""")
         if items:
             return items
 
@@ -352,29 +345,29 @@ def _select_preposto(page, nome):
 
 
 def _verify_preposto_selected(page) -> bool:
-    val = page.evaluate("""
+    val = page.evaluate("""(() => {
         const h = document.querySelector('[id$="pgAutoPreposto_hinput"]');
         return h ? h.value : '';
-    """)
+    })()""")
     return bool(val and val.strip())
 
 
 # ── Novo cadastro ─────────────────────────────────────────────────────────────
 
 def _create_new_preposto(page, nome, cpf, email, telefone) -> bool:
-    result = page.evaluate("""
+    result = page.evaluate("""(() => {
         const btn = Array.from(document.querySelectorAll('button, a'))
             .find(b => b.textContent.includes('Novo') && b.textContent.includes('Cadastro'));
         if (btn) { btn.click(); return 'ok'; }
         return 'nao_encontrado';
-    """)
+    })()""")
     if result != "ok":
         raise Exception("Botão 'Novo Cadastro' não encontrado")
 
     time.sleep(1.5)
     cpf_digits = re.sub(r"\D", "", cpf)
 
-    fill_result = page.evaluate(f"""
+    fill_result = page.evaluate(f"""(() => {{
         const iframe = document.querySelector('iframe[src*="prepostoEdit"]')
                     || document.querySelector('iframe');
         if (!iframe) return 'iframe_nao_encontrado';
@@ -395,11 +388,11 @@ def _create_new_preposto(page, nome, cpf, email, telefone) -> bool:
         fill(inputs[2], {repr(telefone)});
         fill(inputs[3], {repr(email)});
         return 'preenchido';
-    """)
+    }})()""")
     if fill_result == "iframe_nao_encontrado":
         raise Exception("Iframe do formulário Novo Cadastro não encontrado")
 
-    save_result = page.evaluate("""
+    save_result = page.evaluate("""(() => {
         const iframe = document.querySelector('iframe[src*="prepostoEdit"]')
                     || document.querySelector('iframe');
         const doc = iframe.contentDocument || iframe.contentWindow.document;
@@ -407,7 +400,7 @@ def _create_new_preposto(page, nome, cpf, email, telefone) -> bool:
             .find(b => b.textContent.includes('Salvar') || b.value === 'Salvar');
         if (btn) { btn.click(); return 'salvo'; }
         return 'nao_encontrado';
-    """)
+    })()""")
     if save_result != "salvo":
         raise Exception("Botão Salvar no formulário de novo preposto não encontrado")
 
