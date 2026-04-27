@@ -147,13 +147,30 @@ def _auto_login(page, log):
     log("Preenchendo credenciais Elaw...")
     page.fill("#username", elaw_user, timeout=PAGE_TIMEOUT)
     page.fill("#authKey", elaw_pass, timeout=PAGE_TIMEOUT)
-    # Enter é mais confiável que click em modo headless
-    page.press("#authKey", "Enter")
 
-    page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT)
+    # Botão é type="button" (não submit) — clicar via JS ignora checagens de visibilidade
+    clicked = page.evaluate("""
+        const btn = Array.from(document.querySelectorAll('button'))
+            .find(b => b.textContent.trim().includes('Acessar'));
+        if (btn) { btn.click(); return true; }
+        return false;
+    """)
+    if not clicked:
+        log("Botão 'Acessar' não encontrado via JS — tentando Enter...", "warn")
+        page.press("#authKey", "Enter")
+
+    page.wait_for_load_state("networkidle", timeout=30_000)
 
     if _is_login_page(page):
-        raise Exception("Login falhou — verifique ELAW_USER e ELAW_PASS no Render.")
+        # Captura mensagem de erro do Elaw, se houver
+        err_msg = page.evaluate("""
+            const el = document.querySelector(
+                '.ui-messages-error-summary, .ui-messages-error, [class*="error-msg"], .growl-message'
+            );
+            return el ? el.textContent.trim() : null;
+        """)
+        detail = f": {err_msg}" if err_msg else " — verifique ELAW_USER e ELAW_PASS no Render."
+        raise Exception(f"Login falhou{detail}")
 
     log("✅ Login concluído.")
 
