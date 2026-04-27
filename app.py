@@ -178,6 +178,15 @@ def status():
     return jsonify(_state)
 
 
+@app.route("/debug-screenshot")
+@login_required
+def debug_screenshot():
+    path = Path("/tmp/debug_login.png")
+    if not path.exists():
+        return jsonify({"erro": "Nenhum screenshot disponível ainda"}), 404
+    return send_file(path, mimetype="image/png")
+
+
 @app.route("/download")
 @login_required
 def download():

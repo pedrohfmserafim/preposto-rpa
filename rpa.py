@@ -87,6 +87,10 @@ def run_automation(rows: list[dict], log, report_path: Path):
                     novos += 1
             except Exception as e:
                 status, detail, is_novo = "ERRO", str(e)[:300], False
+                try:
+                    page.goto(ELAW_URL, wait_until="networkidle", timeout=30_000)
+                except Exception:
+                    pass
 
             results.append({
                 "numero_processo": numero,
@@ -165,6 +169,7 @@ def _auto_login(page, log):
     page.wait_for_load_state("networkidle", timeout=30_000)
 
     if _is_login_page(page):
+        page.screenshot(path="/tmp/debug_login.png", full_page=True)
         err_msg = page.evaluate("""(() => {
             const el = document.querySelector(
                 '.ui-messages-error-summary, .ui-messages-error, [class*="error-msg"], .growl-message'
@@ -172,7 +177,7 @@ def _auto_login(page, log):
             return el ? el.textContent.trim() : null;
         })()""")
         detail = f": {err_msg}" if err_msg else " — verifique ELAW_USER e ELAW_PASS no Render."
-        raise Exception(f"Login falhou{detail}")
+        raise Exception(f"Login falhou{detail} (screenshot salvo em /debug-screenshot)")
 
     log("✅ Login concluído.")
 
@@ -289,7 +294,11 @@ def _click_task_confirm(page):
     try:
         page.wait_for_url("**/agendamentoContenciosoConfirm.elaw**", timeout=10_000)
     except PWTimeout:
-        raise Exception("Tela de confirmação de agendamento não carregou")
+        # Algumas versões do Elaw carregam o form sem mudar a URL — verificar pelo campo
+        try:
+            page.wait_for_selector('[id$="pgAutoPreposto_input"]', state="visible", timeout=5_000)
+        except PWTimeout:
+            raise Exception("Tela de confirmação de agendamento não carregou")
 
     return "ok"
 
@@ -326,12 +335,15 @@ def _type_and_poll_autocomplete(page, search_term) -> list | None:
 
     for _ in range(POLL_ATTEMPTS):
         time.sleep(POLL_WAIT)
-        items = page.evaluate("""(() => {
-            const panel = document.querySelector('[id$="pgAutoPreposto_panel"]');
-            if (!panel) return null;
-            const items = Array.from(panel.querySelectorAll('li')).map(i => i.textContent.trim());
-            return items.length > 0 ? items : null;
-        })()""")
+        try:
+            items = page.evaluate("""(() => {
+                const panel = document.querySelector('[id$="pgAutoPreposto_panel"]');
+                if (!panel) return null;
+                const items = Array.from(panel.querySelectorAll('li')).map(i => i.textContent.trim());
+                return items.length > 0 ? items : null;
+            })()""")
+        except Exception:
+            return None
         if items:
             return items
 
