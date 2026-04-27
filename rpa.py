@@ -149,12 +149,12 @@ def _auto_login(page, log):
     page.fill("#authKey", elaw_pass, timeout=PAGE_TIMEOUT)
 
     # Botão é type="button" (não submit) — clicar via JS ignora checagens de visibilidade
-    clicked = page.evaluate("""
+    clicked = page.evaluate("""(() => {
         const btn = Array.from(document.querySelectorAll('button'))
             .find(b => b.textContent.trim().includes('Acessar'));
         if (btn) { btn.click(); return true; }
         return false;
-    """)
+    })()""")
     if not clicked:
         log("Botão 'Acessar' não encontrado via JS — tentando Enter...", "warn")
         page.press("#authKey", "Enter")
