@@ -189,9 +189,12 @@ def _process_row(page, numero, nome, cpf, email, telefone):
 # ── Navegação ─────────────────────────────────────────────────────────────────
 
 def _navigate_to_process(page, numero):
+    # Aguarda a barra de busca estar disponível (ID JSF é dinâmico — usar seletor parcial)
+    page.wait_for_selector('[id*="globaSearchAutocomplete_input"]', timeout=PAGE_TIMEOUT)
+
     for attempt in range(2):
         page.evaluate("""
-            const el = document.getElementById('j_id_2g:globaSearchAutocomplete_input');
+            const el = document.querySelector('[id*="globaSearchAutocomplete_input"]');
             el.value = '';
             el.focus();
             el.click();
