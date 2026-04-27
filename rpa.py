@@ -158,8 +158,16 @@ def _auto_login(page, log):
 
 
 def _is_login_page(page) -> bool:
+    # Checa URL E presença dos campos de login (Elaw usa URL raiz para o login)
     url = page.url.lower()
-    return any(k in url for k in ("login", "signin", "sso", "auth", "microsoftonline"))
+    if any(k in url for k in ("login", "signin", "sso", "auth", "microsoftonline")):
+        return True
+    try:
+        return bool(page.evaluate(
+            "!!(document.getElementById('username') || document.getElementById('authKey'))"
+        ))
+    except Exception:
+        return False
 
 
 # ── Fluxo por processo ────────────────────────────────────────────────────────
