@@ -87,10 +87,7 @@ def run_automation(rows: list[dict], log, report_path: Path):
                     novos += 1
             except Exception as e:
                 status, detail, is_novo = "ERRO", str(e)[:300], False
-                try:
-                    page.goto(ELAW_URL, wait_until="networkidle", timeout=30_000)
-                except Exception:
-                    pass
+                _recover_page(page, log)
 
             results.append({
                 "numero_processo": numero,
@@ -180,6 +177,21 @@ def _auto_login(page, log):
         raise Exception(f"Login falhou{detail} (screenshot salvo em /debug-screenshot)")
 
     log("✅ Login concluído.")
+
+
+def _recover_page(page, log):
+    try:
+        page.goto(ELAW_URL, wait_until="domcontentloaded", timeout=30_000)
+        if _is_login_page(page):
+            log("  🔄 Sessão expirada — refazendo login...", "warn")
+            _auto_login(page, log)
+        page.wait_for_selector(
+            '[id*="globaSearchAutocomplete_input"]',
+            state="visible",
+            timeout=30_000,
+        )
+    except Exception as recover_err:
+        log(f"  ⚠️ Recovery falhou: {str(recover_err)[:120]}", "warn")
 
 
 def _is_login_page(page) -> bool:
