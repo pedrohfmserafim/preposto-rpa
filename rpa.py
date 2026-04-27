@@ -68,6 +68,10 @@ def run_automation(rows: list[dict], log, report_path: Path):
         else:
             log("✅ Sessão ativa, iniciando automação...")
 
+        # Navega para processoList onde a barra de busca está sempre disponível
+        page.goto(f"{ELAW_URL}/processoList.elaw", wait_until="networkidle", timeout=PAGE_TIMEOUT)
+        page.wait_for_selector('[id*="globaSearchAutocomplete_input"]', state="visible", timeout=PAGE_TIMEOUT)
+
         total = len(rows)
         for i, row in enumerate(rows, 1):
             numero    = str(row.get("numero_processo", "")).strip()
@@ -181,7 +185,7 @@ def _auto_login(page, log):
 
 def _recover_page(page, log):
     try:
-        page.goto(f"{ELAW_URL}/processoList.elaw", wait_until="domcontentloaded", timeout=30_000)
+        page.goto(f"{ELAW_URL}/processoList.elaw", wait_until="networkidle", timeout=PAGE_TIMEOUT)
         page.wait_for_selector(
             '[id*="globaSearchAutocomplete_input"]',
             state="visible",
