@@ -12,9 +12,15 @@ import re
 import time
 from pathlib import Path
 from datetime import datetime
-from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font
+
+# Garante que build e runtime usam o mesmo caminho para o Chromium no Render.
+# Deve ser definido ANTES de importar o playwright.
+if os.environ.get("RENDER"):
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/opt/render/project/src/.playwright-browsers"
+
+from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 ELAW_URL      = "https://carrefour.elaw.com.br"
 LOGIN_TIMEOUT = 120_000
