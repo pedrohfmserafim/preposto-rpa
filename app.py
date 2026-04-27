@@ -49,7 +49,14 @@ APP_USER = os.environ.get("APP_USER", "admin")
 APP_PASS = os.environ.get("APP_PASS", "admin")
 
 _log_queue: queue.Queue = queue.Queue()
-_state = {"running": False, "done": False, "report_ready": False, "session_id": None}
+_state = {
+    "running": False,
+    "done": False,
+    "report_ready": False,
+    "session_id": None,
+    "paused": False,
+    "results": [],
+}
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -143,7 +150,7 @@ def execute():
     while not _log_queue.empty():
         _log_queue.get_nowait()
     _state.update({"running": True, "done": False, "report_ready": False,
-                   "session_id": sid})
+                   "session_id": sid, "paused": False, "results": []})
 
     thread = threading.Thread(
         target=_run, args=(rows, report_path), daemon=True
@@ -175,7 +182,33 @@ def logs():
 @app.route("/status")
 @login_required
 def status():
-    return jsonify(_state)
+    return jsonify({k: v for k, v in _state.items() if k != "results"})
+
+
+@app.route("/pause", methods=["POST"])
+@login_required
+def pause():
+    _state["paused"] = True
+    return jsonify({"ok": True})
+
+
+@app.route("/resume", methods=["POST"])
+@login_required
+def resume():
+    _state["paused"] = False
+    return jsonify({"ok": True})
+
+
+@app.route("/partial-report")
+@login_required
+def partial_report():
+    results = _state.get("results", [])
+    if not results:
+        return jsonify({"erro": "Nenhum resultado disponível ainda"}), 404
+    path = Path("/tmp/relatorio_parcial.xlsx")
+    rpa_module._build_report(results, path)
+    return send_file(path, as_attachment=True,
+                     download_name="relatorio_parcial.xlsx")
 
 
 @app.route("/debug-screenshot")
@@ -257,7 +290,7 @@ def _log(msg: str, status: str | None = None):
 
 def _run(rows: list[dict], report_path: Path):
     try:
-        rpa_module.run_automation(rows, _log, report_path)
+        rpa_module.run_automation(rows, _log, report_path, _state)
         _state["report_ready"] = True
     except Exception:
         _log(f"Erro crítico:\n{traceback.format_exc()}", "error")

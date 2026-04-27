@@ -123,6 +123,25 @@
     #log-box .info  { color: #79c0ff; }
     #log-box .done  { color: #56d364; font-weight: bold; }
 
+    /* Controls during run */
+    #run-controls { display: none; gap: 8px; }
+    #btn-pause {
+      background: #b45309;
+      color: #fff;
+      flex: 1;
+      padding: 10px;
+    }
+    #btn-pause:hover { background: #92400e; }
+    #btn-pause.paused { background: #1F4E79; }
+    #btn-pause.paused:hover { background: #163a5c; }
+    #btn-partial {
+      background: #374151;
+      color: #fff;
+      flex: 1;
+      padding: 10px;
+    }
+    #btn-partial:hover { background: #1f2937; }
+
     /* Download */
     #download-section { display: none; }
     #btn-download {
@@ -198,9 +217,15 @@
       <div id="log-box"></div>
     </div>
 
+    <!-- Controls during run -->
+    <div id="run-controls" style="display:none; gap:8px;" class="btn-row">
+      <button id="btn-pause" type="button">⏸ Pausar</button>
+      <button id="btn-partial" type="button">📥 Baixar Parcial</button>
+    </div>
+
     <!-- Download -->
     <div id="download-section">
-      <button id="btn-download" type="button">⬇ Baixar Relatório Excel</button>
+      <button id="btn-download" type="button">⬇ Baixar Relatório Final</button>
     </div>
 
   </div>
@@ -220,9 +245,12 @@
   const progressWrap = document.getElementById("progress-wrap");
   const progressFill = document.getElementById("progress-fill");
   const downloadSection = document.getElementById("download-section");
-  const btnDownload = document.getElementById("btn-download");
+  const btnDownload  = document.getElementById("btn-download");
+  const runControls  = document.getElementById("run-controls");
+  const btnPause     = document.getElementById("btn-pause");
+  const btnPartial   = document.getElementById("btn-partial");
 
-  let total = 0, done = 0, evtSource = null;
+  let total = 0, done = 0, evtSource = null, isPaused = false;
 
   // ── Upload ────────────────────────────────────────────────────────────────
   uploadZone.addEventListener("click", () => fileInput.click());
@@ -279,6 +307,10 @@
         btnReset.disabled   = false;
         return;
       }
+      runControls.style.display = "flex";
+      isPaused = false;
+      btnPause.textContent = "⏸ Pausar";
+      btnPause.classList.remove("paused");
       startSSE();
     } catch (e) {
       appendLog("Falha ao iniciar: " + e.message, "error");
@@ -296,6 +328,7 @@
       if (data.done) {
         evtSource.close();
         btnReset.disabled = false;
+        runControls.style.display = "none";
         downloadSection.style.display = "block";
         return;
       }
@@ -328,20 +361,35 @@
     progressText.textContent = total ? `${done} / ${total}` : "";
   }
 
+  // ── Pause / Resume ────────────────────────────────────────────────────────
+  btnPause.addEventListener("click", async () => {
+    isPaused = !isPaused;
+    const route = isPaused ? "/pause" : "/resume";
+    await fetch(route, { method: "POST" });
+    btnPause.textContent = isPaused ? "▶️ Retomar" : "⏸ Pausar";
+    btnPause.classList.toggle("paused", isPaused);
+  });
+
+  // ── Relatório parcial ─────────────────────────────────────────────────────
+  btnPartial.addEventListener("click", () => {
+    window.open("/partial-report", "_blank");
+  });
+
   // ── Reset ─────────────────────────────────────────────────────────────────
   btnReset.addEventListener("click", () => {
     if (evtSource) evtSource.close();
     fileInput.value = "";
     preview.style.display   = "none";
     logSection.style.display = "none";
+    runControls.style.display = "none";
     downloadSection.style.display = "none";
     progressFill.style.width = "0%";
     logBox.innerHTML = "";
     btnExecute.disabled = true;
-    done = 0; total = 0;
+    done = 0; total = 0; isPaused = false;
   });
 
-  // ── Download ──────────────────────────────────────────────────────────────
+  // ── Download final ────────────────────────────────────────────────────────
   btnDownload.addEventListener("click", () => {
     window.location.href = "/download";
   });

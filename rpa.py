@@ -34,7 +34,7 @@ IS_SERVER = bool(os.environ.get("RENDER") or os.environ.get("IS_SERVER"))
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
-def run_automation(rows: list[dict], log, report_path: Path):
+def run_automation(rows: list[dict], log, report_path: Path, state: dict | None = None):
     results = []
     novos   = 0
 
@@ -74,6 +74,13 @@ def run_automation(rows: list[dict], log, report_path: Path):
 
         total = len(rows)
         for i, row in enumerate(rows, 1):
+            # ── Pause ──────────────────────────────────────────────────────────
+            if state and state.get("paused"):
+                log("⏸ Pausado — aguardando retomada...", "warn")
+                while state.get("paused"):
+                    time.sleep(1)
+                log("▶️ Retomando...", "info")
+
             numero    = str(row.get("numero_processo", "")).strip()
             nome      = str(row.get("nome_preposto", "")).strip()
             cpf       = re.sub(r"\D", "", str(row.get("cpf_preposto") or ""))
@@ -102,7 +109,7 @@ def run_automation(rows: list[dict], log, report_path: Path):
                         _recover_page(page, log)
                         break
 
-            results.append({
+            row_result = {
                 "numero_processo": numero,
                 "nome_preposto":   nome,
                 "cpf":             cpf,
@@ -110,7 +117,10 @@ def run_automation(rows: list[dict], log, report_path: Path):
                 "status":          status,
                 "detalhe":         detail,
                 "horario":         datetime.now().strftime("%H:%M:%S"),
-            })
+            }
+            results.append(row_result)
+            if state is not None:
+                state["results"].append(row_result)
 
             icons = {"OK": "✅", "JÁ CONFIRMADO": "ℹ️", "ERRO": "❌"}
             css   = {"OK": "ok", "JÁ CONFIRMADO": "ok", "ERRO": "error"}
