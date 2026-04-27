@@ -83,15 +83,24 @@ def run_automation(rows: list[dict], log, report_path: Path):
 
             log(f"[{i}/{total}] {numero} — {nome}...")
 
-            try:
-                status, detail, is_novo = _process_row(
-                    page, numero, nome, cpf, email, telefone
-                )
-                if is_novo:
-                    novos += 1
-            except Exception as e:
-                status, detail, is_novo = "ERRO", str(e)[:300], False
-                _recover_page(page, log)
+            for attempt in range(2):
+                try:
+                    status, detail, is_novo = _process_row(
+                        page, numero, nome, cpf, email, telefone
+                    )
+                    if is_novo:
+                        novos += 1
+                    break
+                except Exception as e:
+                    err_str = str(e)
+                    if "Execution context was destroyed" in err_str and attempt == 0:
+                        log(f"  🔁 Contexto destruído, tentando novamente...", "warn")
+                        _recover_page(page, log)
+                        # continua para a segunda tentativa
+                    else:
+                        status, detail, is_novo = "ERRO", err_str[:300], False
+                        _recover_page(page, log)
+                        break
 
             results.append({
                 "numero_processo": numero,
