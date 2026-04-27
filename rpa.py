@@ -147,7 +147,8 @@ def _auto_login(page, log):
     log("Preenchendo credenciais Elaw...")
     page.fill("#username", elaw_user, timeout=PAGE_TIMEOUT)
     page.fill("#authKey", elaw_pass, timeout=PAGE_TIMEOUT)
-    page.click("button:has-text('Acessar')", timeout=PAGE_TIMEOUT)
+    # Enter é mais confiável que click em modo headless
+    page.press("#authKey", "Enter")
 
     page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT)
 
