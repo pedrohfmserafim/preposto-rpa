@@ -25,9 +25,9 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 ELAW_URL      = "https://carrefour.elaw.com.br"
 LOGIN_TIMEOUT = 120_000
-PAGE_TIMEOUT  = 15_000
-POLL_ATTEMPTS = 5
-POLL_WAIT     = 1.2
+PAGE_TIMEOUT  = 40_000   # Render é lento — 40s para carregamentos de página
+POLL_ATTEMPTS = 12        # 12 × 2s = 24s máx de polling para autocompletes
+POLL_WAIT     = 2.0
 
 IS_SERVER = bool(os.environ.get("RENDER") or os.environ.get("IS_SERVER"))
 
@@ -269,7 +269,7 @@ def _navigate_to_process(page, numero):
         raise Exception(f"Autocomplete da busca não abriu para o processo {numero}")
 
     try:
-        page.wait_for_url("**/processoView.elaw**", timeout=10_000)
+        page.wait_for_url("**/processoView.elaw**", timeout=PAGE_TIMEOUT)
     except PWTimeout:
         raise Exception(f"Processo {numero} não encontrado no sistema")
 
@@ -308,11 +308,11 @@ def _click_task_confirm(page):
         """)
 
     try:
-        page.wait_for_url("**/agendamentoContenciosoConfirm.elaw**", timeout=10_000)
+        page.wait_for_url("**/agendamentoContenciosoConfirm.elaw**", timeout=PAGE_TIMEOUT)
     except PWTimeout:
         # Algumas versões do Elaw carregam o form sem mudar a URL — verificar pelo campo
         try:
-            page.wait_for_selector('[id$="pgAutoPreposto_input"]', state="visible", timeout=5_000)
+            page.wait_for_selector('[id$="pgAutoPreposto_input"]', state="visible", timeout=PAGE_TIMEOUT)
         except PWTimeout:
             raise Exception("Tela de confirmação de agendamento não carregou")
 
