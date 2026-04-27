@@ -2,7 +2,7 @@ services:
   - type: web
     name: preposto-rpa
     env: python
-    buildCommand: pip install -r requirements.txt && PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright-browsers python -m playwright install --with-deps chromium
+    buildCommand: bash build.sh
     startCommand: gunicorn app:app --timeout 600 --workers 1 --threads 4 --bind 0.0.0.0:$PORT
     envVars:
       - key: SECRET_KEY
@@ -17,3 +17,5 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: /opt/render/project/src/.playwright-browsers

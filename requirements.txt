@@ -1,3 +1,4 @@
+# v2 — força rebuild do cache do Render
 flask>=3.0
 playwright>=1.44
 openpyxl>=3.1
