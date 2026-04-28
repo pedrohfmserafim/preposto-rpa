@@ -242,6 +242,13 @@ def download():
                      download_name="relatorio_prepostos.xlsx")
 
 
+# ── Keep-alive ────────────────────────────────────────────────────────────────
+@app.route("/ping")
+def ping():
+    """Endpoint público para keep-alive (UptimeRobot, etc.) — sem autenticação."""
+    return jsonify({"ok": True}), 200
+
+
 # ── Error handlers ────────────────────────────────────────────────────────────
 @app.errorhandler(404)
 def not_found(e):
