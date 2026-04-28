@@ -28,6 +28,7 @@ LOGIN_TIMEOUT = 120_000
 PAGE_TIMEOUT  = 40_000   # Render é lento — 40s para carregamentos de página
 POLL_ATTEMPTS = 12        # 12 × 2s = 24s máx de polling para autocompletes
 POLL_WAIT     = 2.0
+BROWSER_RESTART_EVERY = 25  # reinicia o Chromium a cada N processos (limpa memória)
 
 IS_SERVER = bool(os.environ.get("RENDER") or os.environ.get("IS_SERVER"))
 
@@ -37,42 +38,11 @@ IS_SERVER = bool(os.environ.get("RENDER") or os.environ.get("IS_SERVER"))
 def run_automation(rows: list[dict], log, report_path: Path, state: dict | None = None):
     results = []
     novos   = 0
+    total   = len(rows)
 
     with sync_playwright() as p:
-        if IS_SERVER:
-            browser = _launch_server(p)
-            ctx  = browser.new_context(viewport={"width": 1280, "height": 900})
-            page = ctx.new_page()
-        else:
-            chrome_profile = str(Path(__file__).parent / "chrome_profile")
-            ctx  = p.chromium.launch_persistent_context(
-                chrome_profile,
-                headless=False,
-                viewport={"width": 1280, "height": 900},
-                slow_mo=120,
-            )
-            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        browser, page = _start_browser_session(p, log)
 
-        log("Abrindo Elaw Carrefour...")
-        page.goto(ELAW_URL, wait_until="networkidle", timeout=30_000)
-
-        if _is_login_page(page):
-            if IS_SERVER:
-                log("Fazendo login automático...", "info")
-                _auto_login(page, log)
-            else:
-                log("⚠️ Sessão expirada — faça login no browser aberto.", "warn")
-                page.wait_for_url(f"**{ELAW_URL}/**", timeout=LOGIN_TIMEOUT)
-                page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT)
-                log("✅ Login detectado, iniciando automação...")
-        else:
-            log("✅ Sessão ativa, iniciando automação...")
-
-        # Navega para processoList onde a barra de busca está sempre disponível
-        page.goto(f"{ELAW_URL}/processoList.elaw", wait_until="networkidle", timeout=PAGE_TIMEOUT)
-        page.wait_for_selector('[id*="globaSearchAutocomplete_input"]', state="visible", timeout=PAGE_TIMEOUT)
-
-        total = len(rows)
         for i, row in enumerate(rows, 1):
             # ── Pause ──────────────────────────────────────────────────────────
             if state and state.get("paused"):
@@ -80,6 +50,15 @@ def run_automation(rows: list[dict], log, report_path: Path, state: dict | None 
                 while state.get("paused"):
                     time.sleep(1)
                 log("▶️ Retomando...", "info")
+
+            # ── Reinício preventivo do browser (limpa memória) ─────────────────
+            if IS_SERVER and i > 1 and (i - 1) % BROWSER_RESTART_EVERY == 0:
+                log(f"🔄 Reiniciando browser para limpar memória ({i}/{total})...", "info")
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+                browser, page = _start_browser_session(p, log)
 
             numero    = str(row.get("numero_processo", "")).strip()
             nome      = str(row.get("nome_preposto", "")).strip()
@@ -103,7 +82,6 @@ def run_automation(rows: list[dict], log, report_path: Path, state: dict | None 
                     if "Execution context was destroyed" in err_str and attempt == 0:
                         log(f"  🔁 Contexto destruído, tentando novamente...", "warn")
                         _recover_page(page, log)
-                        # continua para a segunda tentativa
                     else:
                         status, detail, is_novo = "ERRO", err_str[:300], False
                         _recover_page(page, log)
@@ -127,9 +105,15 @@ def run_automation(rows: list[dict], log, report_path: Path, state: dict | None 
             log(f"  {icons.get(status,'❌')} {status}: {detail}", css.get(status, "error"))
 
         if IS_SERVER:
-            browser.close()
+            try:
+                browser.close()
+            except Exception:
+                pass
         else:
-            ctx.close()
+            try:
+                page.context.close()
+            except Exception:
+                pass
 
     _build_report(results, report_path)
     ok = sum(1 for r in results if r["status"] in ("OK", "JÁ CONFIRMADO"))
@@ -140,11 +124,50 @@ def run_automation(rows: list[dict], log, report_path: Path, state: dict | None 
     )
 
 
+def _start_browser_session(p, log):
+    """Abre o browser, faz login se necessário e navega para processoList."""
+    if IS_SERVER:
+        browser = _launch_server(p)
+        ctx  = browser.new_context(viewport={"width": 1280, "height": 900})
+        page = ctx.new_page()
+    else:
+        browser = None
+        chrome_profile = str(Path(__file__).parent / "chrome_profile")
+        ctx  = p.chromium.launch_persistent_context(
+            chrome_profile,
+            headless=False,
+            viewport={"width": 1280, "height": 900},
+            slow_mo=120,
+        )
+        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+
+    log("Abrindo Elaw Carrefour...", "info")
+    page.goto(ELAW_URL, wait_until="networkidle", timeout=30_000)
+
+    if _is_login_page(page):
+        if IS_SERVER:
+            log("Fazendo login automático...", "info")
+            _auto_login(page, log)
+        else:
+            log("⚠️ Sessão expirada — faça login no browser aberto.", "warn")
+            page.wait_for_url(f"**{ELAW_URL}/**", timeout=LOGIN_TIMEOUT)
+            page.wait_for_load_state("networkidle", timeout=PAGE_TIMEOUT)
+            log("✅ Login detectado, continuando...")
+    else:
+        log("✅ Sessão ativa.", "info")
+
+    page.goto(f"{ELAW_URL}/processoList.elaw", wait_until="networkidle", timeout=PAGE_TIMEOUT)
+    page.wait_for_selector('[id*="globaSearchAutocomplete_input"]', state="visible", timeout=PAGE_TIMEOUT)
+
+    return browser, page
+
+
 # ── Browser helpers ───────────────────────────────────────────────────────────
 
 def _launch_server(p):
     return p.chromium.launch(
         headless=True,
+        slow_mo=80,   # dá tempo ao PrimeFaces/JSF de processar AJAX (igual ao local)
         args=[
             "--no-sandbox",
             "--disable-dev-shm-usage",
