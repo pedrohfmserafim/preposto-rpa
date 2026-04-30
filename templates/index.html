@@ -4,6 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Preposto RPA — VOX</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@800&display=swap" rel="stylesheet">
   <style>
     /* ── VOX brand tokens ───────────────────────────────────────────────────── */
     :root {
@@ -14,7 +16,7 @@
       --vox-light:     #8b8c8c;   /* cinza claro */
       --vox-deep:      #545c59;   /* cinza-verde escuro */
       --vox-deep-d:    #3d4440;   /* hover deep */
-      --bg:            #f5f2ef;   /* off-white quente */
+      --bg:            #f5f0ec;   /* off-white quente */
       --surface:       #ffffff;
       --border:        #e2ddd8;
     }
@@ -60,15 +62,7 @@
       align-items: center;
       gap: 18px;
     }
-    .vox-badge {
-      font-size: 1.55rem;
-      font-weight: 800;
-      letter-spacing: -.5px;
-      color: var(--vox-primary);
-      line-height: 1;
-      font-family: Georgia, "Times New Roman", serif;
-      font-style: italic;
-    }
+    .vox-badge { display: flex; align-items: center; }
     .header-divider {
       width: 1px;
       height: 36px;
@@ -166,7 +160,7 @@
     #log-box .ok    { color: #7ecf6e; }
     #log-box .error { color: #f07070; }
     #log-box .warn  { color: #e0a550; }
-    #log-box .info  { color: #be6732; }
+    #log-box .info  { color: #f0a06a; }
     #log-box .done  { color: #be6732; font-weight: bold; }
 
     /* ── Controls during run ─────────────────────────────────────────────────── */
@@ -220,7 +214,21 @@
   <div class="card-header">
     <div class="header-accent"></div>
     <div class="header-content">
-      <span class="vox-badge">vox</span>
+      <span class="vox-badge">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 38" height="34" aria-label="VOX">
+          <defs>
+            <linearGradient id="vg" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%"   stop-color="#a85528"/>
+              <stop offset="55%"  stop-color="#be6732"/>
+              <stop offset="100%" stop-color="#cc7840"/>
+            </linearGradient>
+          </defs>
+          <text font-family="'Nunito', 'Varela Round', Arial Rounded MT Bold, sans-serif"
+                font-weight="800" font-size="36"
+                fill="url(#vg)"
+                x="0" y="34" letter-spacing="-1">VOX</text>
+        </svg>
+      </span>
       <div class="header-divider"></div>
       <div class="header-text">
         <h1>Preposto RPA</h1>
