@@ -3,14 +3,28 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Preposto RPA — Elaw Carrefour</title>
+  <title>Preposto RPA — VOX</title>
   <style>
+    /* ── VOX brand tokens ───────────────────────────────────────────────────── */
+    :root {
+      --vox-primary:   #be6732;   /* laranja VOX */
+      --vox-primary-d: #9e5228;   /* hover / sombra */
+      --vox-ink:       #1e1f1f;   /* preto VOX */
+      --vox-mid:       #6f7070;   /* cinza médio */
+      --vox-light:     #8b8c8c;   /* cinza claro */
+      --vox-deep:      #545c59;   /* cinza-verde escuro */
+      --vox-deep-d:    #3d4440;   /* hover deep */
+      --bg:            #f5f2ef;   /* off-white quente */
+      --surface:       #ffffff;
+      --border:        #e2ddd8;
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f0f2f5;
-      color: #1a1a1a;
+      background: var(--bg);
+      color: var(--vox-ink);
       min-height: 100vh;
       display: flex;
       align-items: flex-start;
@@ -19,55 +33,87 @@
     }
 
     .card {
-      background: #fff;
+      background: var(--surface);
       border-radius: 12px;
-      box-shadow: 0 2px 16px rgba(0,0,0,.10);
+      box-shadow: 0 2px 20px rgba(30,31,31,.10);
       width: 100%;
       max-width: 760px;
       overflow: hidden;
     }
 
+    /* ── Header ─────────────────────────────────────────────────────────────── */
     .card-header {
-      background: #1F4E79;
+      background: var(--vox-ink);
       color: #fff;
-      padding: 24px 32px;
+      padding: 0;
+      display: flex;
+      align-items: stretch;
     }
-    .card-header h1 { font-size: 1.25rem; font-weight: 600; }
-    .card-header p  { font-size: .85rem; opacity: .8; margin-top: 4px; }
+    .header-accent {
+      width: 6px;
+      background: var(--vox-primary);
+      flex-shrink: 0;
+    }
+    .header-content {
+      padding: 22px 28px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+    .vox-badge {
+      font-size: 1.55rem;
+      font-weight: 800;
+      letter-spacing: -.5px;
+      color: var(--vox-primary);
+      line-height: 1;
+      font-family: Georgia, "Times New Roman", serif;
+      font-style: italic;
+    }
+    .header-divider {
+      width: 1px;
+      height: 36px;
+      background: rgba(255,255,255,.18);
+    }
+    .header-text h1 { font-size: 1rem; font-weight: 600; color: #fff; }
+    .header-text p  { font-size: .78rem; color: var(--vox-light); margin-top: 3px; }
 
     .card-body { padding: 32px; display: flex; flex-direction: column; gap: 24px; }
 
-    /* Upload zone */
+    /* ── Upload zone ─────────────────────────────────────────────────────────── */
     .upload-zone {
-      border: 2px dashed #b0c4de;
+      border: 2px dashed #ccc5bb;
       border-radius: 8px;
       padding: 36px;
       text-align: center;
       cursor: pointer;
       transition: border-color .2s, background .2s;
     }
-    .upload-zone:hover, .upload-zone.drag { border-color: #1F4E79; background: #f0f6ff; }
-    .upload-zone svg { width: 40px; height: 40px; color: #1F4E79; margin-bottom: 10px; }
-    .upload-zone p   { font-size: .9rem; color: #555; }
-    .upload-zone strong { display: block; font-size: 1rem; color: #1F4E79; margin-bottom: 4px; }
+    .upload-zone:hover, .upload-zone.drag {
+      border-color: var(--vox-primary);
+      background: #fdf6f0;
+    }
+    .upload-zone svg { width: 38px; height: 38px; color: var(--vox-primary); margin-bottom: 10px; }
+    .upload-zone p   { font-size: .9rem; color: var(--vox-mid); }
+    .upload-zone strong { display: block; font-size: 1rem; color: var(--vox-ink); margin-bottom: 4px; }
     #file-input { display: none; }
 
-    /* Preview */
+    /* ── Preview ─────────────────────────────────────────────────────────────── */
     #preview { display: none; }
     .preview-info {
-      background: #e8f4e8;
-      border: 1px solid #a8d5a2;
+      background: #fdf6f0;
+      border: 1px solid #e0c5a8;
+      border-left: 4px solid var(--vox-primary);
       border-radius: 8px;
       padding: 14px 18px;
       font-size: .875rem;
-      color: #2d6a2d;
+      color: var(--vox-primary-d);
     }
-    .preview-info strong { display: block; margin-bottom: 6px; }
+    .preview-info strong { display: block; margin-bottom: 6px; color: var(--vox-ink); }
     .preview-list { list-style: none; padding: 0; margin-top: 6px; }
-    .preview-list li { padding: 2px 0; color: #444; font-size: .82rem; }
-    .preview-list li::before { content: "→ "; color: #2d6a2d; }
+    .preview-list li { padding: 2px 0; color: var(--vox-mid); font-size: .82rem; }
+    .preview-list li::before { content: "→ "; color: var(--vox-primary); }
 
-    /* Buttons */
+    /* ── Buttons ─────────────────────────────────────────────────────────────── */
     .btn-row { display: flex; gap: 12px; }
     button {
       padding: 10px 24px;
@@ -76,24 +122,24 @@
       font-size: .9rem;
       font-weight: 600;
       cursor: pointer;
-      transition: opacity .15s, background .15s;
+      transition: background .15s;
     }
-    button:disabled { opacity: .45; cursor: not-allowed; }
+    button:disabled { opacity: .40; cursor: not-allowed; }
 
     #btn-execute {
-      background: #1F4E79;
+      background: var(--vox-primary);
       color: #fff;
       flex: 1;
     }
-    #btn-execute:not(:disabled):hover { background: #163a5c; }
+    #btn-execute:not(:disabled):hover { background: var(--vox-primary-d); }
 
     #btn-reset {
-      background: #e5e7eb;
-      color: #374151;
+      background: var(--border);
+      color: var(--vox-deep);
     }
-    #btn-reset:hover { background: #d1d5db; }
+    #btn-reset:hover { background: #d5cfc8; }
 
-    /* Log area */
+    /* ── Log area ────────────────────────────────────────────────────────────── */
     #log-section { display: none; }
     .log-header {
       display: flex;
@@ -101,12 +147,12 @@
       align-items: center;
       margin-bottom: 10px;
     }
-    .log-header span { font-weight: 600; font-size: .9rem; }
-    .progress-text   { font-size: .8rem; color: #666; }
+    .log-header span { font-weight: 600; font-size: .9rem; color: var(--vox-ink); }
+    .progress-text   { font-size: .8rem; color: var(--vox-mid); }
 
     #log-box {
-      background: #0d1117;
-      color: #c9d1d9;
+      background: #161412;
+      color: #d4ccc4;
       border-radius: 8px;
       padding: 16px;
       font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
@@ -117,53 +163,53 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
-    #log-box .ok    { color: #56d364; }
-    #log-box .error { color: #f85149; }
-    #log-box .warn  { color: #e3b341; }
-    #log-box .info  { color: #79c0ff; }
-    #log-box .done  { color: #56d364; font-weight: bold; }
+    #log-box .ok    { color: #7ecf6e; }
+    #log-box .error { color: #f07070; }
+    #log-box .warn  { color: #e0a550; }
+    #log-box .info  { color: #be6732; }
+    #log-box .done  { color: #be6732; font-weight: bold; }
 
-    /* Controls during run */
+    /* ── Controls during run ─────────────────────────────────────────────────── */
     #run-controls { display: none; gap: 8px; }
     #btn-pause {
-      background: #b45309;
+      background: var(--vox-primary);
       color: #fff;
       flex: 1;
       padding: 10px;
     }
-    #btn-pause:hover { background: #92400e; }
-    #btn-pause.paused { background: #1F4E79; }
-    #btn-pause.paused:hover { background: #163a5c; }
+    #btn-pause:hover { background: var(--vox-primary-d); }
+    #btn-pause.paused { background: var(--vox-deep); }
+    #btn-pause.paused:hover { background: var(--vox-deep-d); }
     #btn-partial {
-      background: #374151;
+      background: var(--vox-mid);
       color: #fff;
       flex: 1;
       padding: 10px;
     }
-    #btn-partial:hover { background: #1f2937; }
+    #btn-partial:hover { background: #585959; }
 
-    /* Download */
+    /* ── Download ────────────────────────────────────────────────────────────── */
     #download-section { display: none; }
     #btn-download {
-      background: #2d6a2d;
+      background: var(--vox-deep);
       color: #fff;
       width: 100%;
       padding: 12px;
     }
-    #btn-download:hover { background: #1f4d1f; }
+    #btn-download:hover { background: var(--vox-deep-d); }
 
-    /* Progress bar */
+    /* ── Progress bar ────────────────────────────────────────────────────────── */
     .progress-bar-wrap {
-      background: #e5e7eb;
+      background: var(--border);
       border-radius: 4px;
-      height: 6px;
+      height: 5px;
       margin-top: 8px;
       overflow: hidden;
       display: none;
     }
     .progress-bar-fill {
       height: 100%;
-      background: #1F4E79;
+      background: var(--vox-primary);
       width: 0%;
       transition: width .4s ease;
     }
@@ -172,8 +218,15 @@
 <body>
 <div class="card">
   <div class="card-header">
-    <h1>Preposto RPA</h1>
-    <p>Indicação automática de prepostos — Elaw Carrefour</p>
+    <div class="header-accent"></div>
+    <div class="header-content">
+      <span class="vox-badge">vox</span>
+      <div class="header-divider"></div>
+      <div class="header-text">
+        <h1>Preposto RPA</h1>
+        <p>Indicação automática de prepostos — Elaw Carrefour</p>
+      </div>
+    </div>
   </div>
 
   <div class="card-body">
