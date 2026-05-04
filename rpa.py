@@ -156,10 +156,35 @@ def _start_browser_session(p, log):
     else:
         log("✅ Sessão ativa.", "info")
 
-    page.goto(f"{ELAW_URL}/processoList.elaw", wait_until="networkidle", timeout=PAGE_TIMEOUT)
-    page.wait_for_selector('[id*="globaSearchAutocomplete_input"]', state="visible", timeout=PAGE_TIMEOUT)
+    _navigate_to_search(page, log)
 
     return browser, page
+
+
+def _navigate_to_search(page, log):
+    """Navega para processoList e aguarda o autocomplete do PrimeFaces inicializar.
+    Tenta até 3 vezes — no Render o cold start pode demorar mais de 40s."""
+    SEARCH_SELECTOR = '[id*="globaSearchAutocomplete_input"]'
+    for attempt in range(3):
+        try:
+            page.goto(
+                f"{ELAW_URL}/processoList.elaw",
+                wait_until="networkidle",
+                timeout=PAGE_TIMEOUT,
+            )
+            # PrimeFaces monta os componentes depois do networkidle — aguarda um pouco
+            time.sleep(3)
+            page.wait_for_selector(SEARCH_SELECTOR, state="visible", timeout=PAGE_TIMEOUT)
+            return  # sucesso
+        except PWTimeout:
+            if attempt < 2:
+                log(f"  ⏳ Barra de busca não carregou (tentativa {attempt + 1}/3), aguardando...", "warn")
+                time.sleep(5)
+            else:
+                raise Exception(
+                    "Barra de busca global não apareceu após 3 tentativas. "
+                    "Verifique se o Elaw está acessível."
+                )
 
 
 # ── Browser helpers ───────────────────────────────────────────────────────────
@@ -227,12 +252,7 @@ def _auto_login(page, log):
 
 def _recover_page(page, log):
     try:
-        page.goto(f"{ELAW_URL}/processoList.elaw", wait_until="networkidle", timeout=PAGE_TIMEOUT)
-        page.wait_for_selector(
-            '[id*="globaSearchAutocomplete_input"]',
-            state="visible",
-            timeout=PAGE_TIMEOUT,
-        )
+        _navigate_to_search(page, log)
     except Exception as recover_err:
         log(f"  ⚠️ Recovery falhou: {str(recover_err)[:120]}", "warn")
 
