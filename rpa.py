@@ -142,7 +142,9 @@ def _start_browser_session(p, log):
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
 
     log("Abrindo Elaw Carrefour...", "info")
-    page.goto(ELAW_URL, wait_until="networkidle", timeout=30_000)
+    # domcontentloaded é suficiente para detectar se está na tela de login;
+    # networkidle pode nunca disparar em apps com websocket/long-polling (como o Elaw)
+    page.goto(ELAW_URL, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
 
     if _is_login_page(page):
         if IS_SERVER:
