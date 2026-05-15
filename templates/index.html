@@ -333,7 +333,7 @@
     try {
       const res = await fetch("/upload", { method: "POST", body: fd });
       const data = await res.json();
-      if (!res.ok) { alert("Erro: " + data.error); return; }
+      if (!res.ok) { alert("Erro: " + (data.erro || data.error || JSON.stringify(data))); return; }
 
       total = data.total;
       previewTitle.textContent = `${data.total} processo(s) carregado(s) — ${file.name}`;
@@ -363,7 +363,7 @@
       const res = await fetch("/execute", { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
-        appendLog("Erro: " + data.error, "error");
+        appendLog("Erro: " + (data.erro || data.error || JSON.stringify(data)), "error");
         btnExecute.disabled = false;
         btnReset.disabled   = false;
         return;

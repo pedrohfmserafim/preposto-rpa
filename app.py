@@ -56,6 +56,7 @@ _state = {
     "session_id": None,
     "paused": False,
     "results": [],
+    "thread": None,   # referência à thread ativa (para detectar crash sem finally)
 }
 
 
@@ -126,7 +127,13 @@ def upload():
 @login_required
 def execute():
     if _state["running"]:
-        return jsonify({"erro": "Já há uma execução em andamento."}), 400
+        # Se a thread morreu sem executar o finally (OOM/kill no Render), auto-recupera
+        t = _state.get("thread")
+        if t is not None and not t.is_alive():
+            _state["running"] = False
+            _state["done"] = True
+        else:
+            return jsonify({"erro": "Já há uma execução em andamento."}), 400
 
     sid = session.get("upload_session")
     if not sid:
@@ -155,6 +162,7 @@ def execute():
     thread = threading.Thread(
         target=_run, args=(rows, report_path), daemon=True
     )
+    _state["thread"] = thread
     thread.start()
     return jsonify({"ok": True, "total": len(rows)})
 
