@@ -311,7 +311,7 @@
   const btnPause     = document.getElementById("btn-pause");
   const btnPartial   = document.getElementById("btn-partial");
 
-  let total = 0, done = 0, evtSource = null, isPaused = false;
+  let total = 0, done = 0, evtSource = null, isPaused = false, sseRunning = false;
 
   // ── Upload ────────────────────────────────────────────────────────────────
   uploadZone.addEventListener("click", () => fileInput.click());
@@ -382,11 +382,14 @@
 
   function startSSE() {
     if (evtSource) evtSource.close();
+    sseRunning = true;
     evtSource = new EventSource("/logs");
+
     evtSource.onmessage = e => {
       const data = JSON.parse(e.data);
       if (data.heartbeat) return;
       if (data.done) {
+        sseRunning = false;
         evtSource.close();
         btnReset.disabled = false;
         runControls.style.display = "none";
@@ -401,9 +404,16 @@
         }
       }
     };
+
     evtSource.onerror = () => {
-      appendLog("Conexão SSE perdida.", "warn");
       evtSource.close();
+      if (!sseRunning) return;   // encerramento normal, não reconectar
+      appendLog("⚠️ Conexão com o log perdida — reconectando em 4s...", "warn");
+      setTimeout(() => {
+        if (!sseRunning) return;
+        appendLog("🔄 Reconectando ao log...", "info");
+        startSSE();   // reconecta — a automação continua rodando no servidor
+      }, 4000);
     };
   }
 
@@ -438,6 +448,7 @@
 
   // ── Reset ─────────────────────────────────────────────────────────────────
   btnReset.addEventListener("click", () => {
+    sseRunning = false;
     if (evtSource) evtSource.close();
     fileInput.value = "";
     preview.style.display   = "none";
