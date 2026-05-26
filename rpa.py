@@ -25,7 +25,7 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 ELAW_URL      = "https://carrefour.elaw.com.br"
 LOGIN_TIMEOUT = 120_000
-PAGE_TIMEOUT  = 40_000   # Render é lento — 40s para carregamentos de página
+PAGE_TIMEOUT  = 90_000   # Render cold start pode ser muito lento — 90s
 POLL_ATTEMPTS = 12        # 12 × 2s = 24s máx de polling para autocompletes
 POLL_WAIT     = 2.0
 BROWSER_RESTART_EVERY = 25  # reinicia o Chromium a cada N processos (limpa memória)
@@ -142,9 +142,18 @@ def _start_browser_session(p, log):
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
 
     log("Abrindo Elaw Carrefour...", "info")
-    # domcontentloaded é suficiente para detectar se está na tela de login;
-    # networkidle pode nunca disparar em apps com websocket/long-polling (como o Elaw)
-    page.goto(ELAW_URL, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+    # domcontentloaded é suficiente para detectar a tela de login.
+    # Tenta até 3 vezes — no cold start do Render o Chromium + TCP pode demorar muito.
+    for attempt in range(3):
+        try:
+            page.goto(ELAW_URL, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
+            break
+        except PWTimeout:
+            if attempt < 2:
+                log(f"  ⏳ Elaw não respondeu (tentativa {attempt + 1}/3), aguardando...", "warn")
+                time.sleep(5)
+            else:
+                raise Exception("Elaw inacessível após 3 tentativas — verifique a URL e tente novamente.")
 
     if _is_login_page(page):
         if IS_SERVER:
