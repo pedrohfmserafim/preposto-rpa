@@ -409,10 +409,25 @@
       evtSource.close();
       if (!sseRunning) return;   // encerramento normal, não reconectar
       appendLog("⚠️ Conexão com o log perdida — reconectando em 4s...", "warn");
-      setTimeout(() => {
+      setTimeout(async () => {
         if (!sseRunning) return;
+        // Verifica no servidor se a automação já terminou enquanto estava desconectado
+        try {
+          const res = await fetch("/status");
+          const s = await res.json();
+          if (s.done) {
+            sseRunning = false;
+            btnReset.disabled = false;
+            runControls.style.display = "none";
+            downloadSection.style.display = "block";
+            appendLog("✅ Automação concluída (detectado ao reconectar).", "done");
+            return;
+          }
+          // Sincroniza contagem de processos concluídos
+          if (typeof s.done_count === "number") { done = s.done_count; updateProgress(); }
+        } catch (_) {}
         appendLog("🔄 Reconectando ao log...", "info");
-        startSSE();   // reconecta — a automação continua rodando no servidor
+        startSSE();
       }, 4000);
     };
   }

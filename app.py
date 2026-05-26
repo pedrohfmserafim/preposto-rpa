@@ -190,7 +190,9 @@ def logs():
 @app.route("/status")
 @login_required
 def status():
-    return jsonify({k: v for k, v in _state.items() if k != "results"})
+    data = {k: v for k, v in _state.items() if k not in ("results", "thread")}
+    data["done_count"] = len(_state.get("results", []))
+    return jsonify(data)
 
 
 @app.route("/pause", methods=["POST"])
