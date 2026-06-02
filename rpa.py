@@ -35,15 +35,17 @@ IS_SERVER = bool(os.environ.get("RENDER") or os.environ.get("IS_SERVER"))
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
-def run_automation(rows: list[dict], log, report_path: Path, state: dict | None = None):
-    results = []
-    novos   = 0
-    total   = len(rows)
+def run_automation(rows: list[dict], log, report_path: Path, state: dict | None = None, preloaded_results: list | None = None):
+    results       = list(preloaded_results or [])
+    novos         = sum(1 for r in results if "novo" in r.get("detalhe", "").lower())
+    total_original = (state.get("total_original") if state else None) or (len(rows) + len(results))
 
     with sync_playwright() as p:
         browser, page = _start_browser_session(p, log)
 
-        for i, row in enumerate(rows, 1):
+        for batch_i, row in enumerate(rows, 1):
+            i = len(results) + 1  # índice global (considerando já processados)
+
             # ── Pause ──────────────────────────────────────────────────────────
             if state and state.get("paused"):
                 log("⏸ Pausado — aguardando retomada...", "warn")
@@ -52,8 +54,8 @@ def run_automation(rows: list[dict], log, report_path: Path, state: dict | None 
                 log("▶️ Retomando...", "info")
 
             # ── Reinício preventivo do browser (limpa memória) ─────────────────
-            if IS_SERVER and i > 1 and (i - 1) % BROWSER_RESTART_EVERY == 0:
-                log(f"🔄 Reiniciando browser para limpar memória ({i}/{total})...", "info")
+            if IS_SERVER and batch_i > 1 and (batch_i - 1) % BROWSER_RESTART_EVERY == 0:
+                log(f"🔄 Reiniciando browser para limpar memória ({i}/{total_original})...", "info")
                 try:
                     browser.close()
                 except Exception:
@@ -67,7 +69,7 @@ def run_automation(rows: list[dict], log, report_path: Path, state: dict | None 
             email     = email_raw.replace(";", " ").split()[0] if email_raw else ""
             telefone  = str(row.get("telefone_preposto") or "").strip()
 
-            log(f"[{i}/{total}] {numero} — {nome}...")
+            log(f"[{i}/{total_original}] {numero} — {nome}...")
 
             for attempt in range(2):
                 try:
@@ -102,7 +104,12 @@ def run_automation(rows: list[dict], log, report_path: Path, state: dict | None 
 
             icons = {"OK": "✅", "JÁ CONFIRMADO": "ℹ️", "ERRO": "❌"}
             css   = {"OK": "ok", "JÁ CONFIRMADO": "ok", "ERRO": "error"}
-            log(f"  {icons.get(status,'❌')} {status}: {detail}", css.get(status, "error"))
+            # Envia checkpoint junto com o log — frontend salva no localStorage
+            log(
+                f"  {icons.get(status,'❌')} {status}: {detail}",
+                css.get(status, "error"),
+                checkpoint=row_result,
+            )
 
         if IS_SERVER:
             try:
@@ -122,6 +129,8 @@ def run_automation(rows: list[dict], log, report_path: Path, state: dict | None 
         f"({novos} preposto(s) novo(s) cadastrado(s)).",
         "done",
     )
+    # Sinaliza ao frontend que pode limpar o checkpoint
+    log("", None, checkpoint={"_clear": True})
 
 
 def _start_browser_session(p, log):

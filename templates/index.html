@@ -260,6 +260,21 @@
       </div>
     </div>
 
+    <!-- Checkpoint banner (retomar execução anterior) -->
+    <div id="ckpt-banner" style="display:none; background:#fff8e1; border:1px solid #f9a825; border-radius:8px; padding:14px 18px; font-size:.875rem; color:#6d4c00;">
+      <strong id="ckpt-title"></strong>
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="btn-retomar" type="button"
+          style="background:#f9a825;color:#fff;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-weight:600;font-size:.85rem;">
+          ↩ Retomar do ponto onde parou
+        </button>
+        <button id="btn-discard-ckpt" type="button"
+          style="background:#e5e7eb;color:#374151;border:none;border-radius:6px;padding:8px 18px;cursor:pointer;font-size:.85rem;">
+          Ignorar e começar do zero
+        </button>
+      </div>
+    </div>
+
     <!-- Actions -->
     <div class="btn-row">
       <button id="btn-execute" disabled>Executar</button>
@@ -293,32 +308,140 @@
 </div>
 
 <script>
-  const uploadZone = document.getElementById("upload-zone");
-  const fileInput  = document.getElementById("file-input");
-  const preview    = document.getElementById("preview");
-  const previewTitle = document.getElementById("preview-title");
-  const previewList  = document.getElementById("preview-list");
-  const btnExecute = document.getElementById("btn-execute");
-  const btnReset   = document.getElementById("btn-reset");
-  const logSection = document.getElementById("log-section");
-  const logBox     = document.getElementById("log-box");
-  const progressText = document.getElementById("progress-text");
-  const progressWrap = document.getElementById("progress-wrap");
-  const progressFill = document.getElementById("progress-fill");
+  // ── Elementos ─────────────────────────────────────────────────────────────
+  const uploadZone      = document.getElementById("upload-zone");
+  const fileInput       = document.getElementById("file-input");
+  const preview         = document.getElementById("preview");
+  const previewTitle    = document.getElementById("preview-title");
+  const previewList     = document.getElementById("preview-list");
+  const ckptBanner      = document.getElementById("ckpt-banner");
+  const ckptTitle       = document.getElementById("ckpt-title");
+  const btnRetomar      = document.getElementById("btn-retomar");
+  const btnDiscardCkpt  = document.getElementById("btn-discard-ckpt");
+  const btnExecute      = document.getElementById("btn-execute");
+  const btnReset        = document.getElementById("btn-reset");
+  const logSection      = document.getElementById("log-section");
+  const logBox          = document.getElementById("log-box");
+  const progressText    = document.getElementById("progress-text");
+  const progressWrap    = document.getElementById("progress-wrap");
+  const progressFill    = document.getElementById("progress-fill");
   const downloadSection = document.getElementById("download-section");
-  const btnDownload  = document.getElementById("btn-download");
-  const runControls  = document.getElementById("run-controls");
-  const btnPause     = document.getElementById("btn-pause");
-  const btnPartial   = document.getElementById("btn-partial");
+  const btnDownload     = document.getElementById("btn-download");
+  const runControls     = document.getElementById("run-controls");
+  const btnPause        = document.getElementById("btn-pause");
+  const btnPartial      = document.getElementById("btn-partial");
 
   let total = 0, done = 0, evtSource = null, isPaused = false, sseRunning = false;
+
+  // ── Checkpoint (localStorage) ─────────────────────────────────────────────
+  const CKPT_KEY = "preposto_rpa_ckpt";   // progresso por processo
+  const FILE_KEY = "preposto_rpa_file";   // arquivo xlsx em base64
+  const FILE_NAME_KEY = "preposto_rpa_filename";
+  const CKPT_TTL = 24 * 60 * 60 * 1000;  // 24 horas
+
+  function saveCkpt(result) {
+    // result pode ser {_clear:true} para limpar
+    if (result && result._clear) { clearCkpt(); return; }
+    try {
+      const raw = localStorage.getItem(CKPT_KEY);
+      const ckpt = raw ? JSON.parse(raw) : { ts: Date.now(), total, results: [] };
+      ckpt.results.push(result);
+      ckpt.ts = Date.now();
+      ckpt.total = total;
+      localStorage.setItem(CKPT_KEY, JSON.stringify(ckpt));
+    } catch (_) {}
+  }
+
+  function loadCkpt() {
+    try {
+      const raw = localStorage.getItem(CKPT_KEY);
+      if (!raw) return null;
+      const ckpt = JSON.parse(raw);
+      if (Date.now() - ckpt.ts > CKPT_TTL) { clearCkpt(); return null; }
+      return ckpt;
+    } catch (_) { return null; }
+  }
+
+  function clearCkpt() {
+    localStorage.removeItem(CKPT_KEY);
+    localStorage.removeItem(FILE_KEY);
+    localStorage.removeItem(FILE_NAME_KEY);
+  }
+
+  function saveFileToStorage(file) {
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          localStorage.setItem(FILE_KEY, e.target.result);       // dataURL base64
+          localStorage.setItem(FILE_NAME_KEY, file.name);
+        } catch (_) { /* localStorage cheio — ignora */ }
+        resolve();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function reuploadFromStorage() {
+    const dataUrl  = localStorage.getItem(FILE_KEY);
+    const filename = localStorage.getItem(FILE_NAME_KEY) || "planilha.xlsx";
+    if (!dataUrl) return null;
+    const blob = await (await fetch(dataUrl)).blob();
+    const file = new File([blob], filename,
+      { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/upload", { method: "POST", body: fd });
+    if (!res.ok) return null;
+    return await res.json();   // { ok, total, preview }
+  }
+
+  // ── Verificação de checkpoint ao carregar a página ────────────────────────
+  window.addEventListener("load", () => {
+    const ckpt = loadCkpt();
+    const hasFile = !!localStorage.getItem(FILE_KEY);
+    if (ckpt && ckpt.results && ckpt.results.length > 0 && hasFile) {
+      const done_n  = ckpt.results.length;
+      const total_n = ckpt.total || "?";
+      ckptTitle.textContent =
+        `⚡ Execução anterior interrompida: ${done_n} de ${total_n} processos concluídos.` +
+        ` Clique em "Retomar" para continuar de onde parou — sem precisar subir a planilha novamente.`;
+      ckptBanner.style.display = "block";
+    }
+  });
+
+  btnRetomar.addEventListener("click", async () => {
+    const ckpt = loadCkpt();
+    if (!ckpt) { alert("Checkpoint expirado. Faça upload da planilha."); return; }
+
+    btnRetomar.disabled = true;
+    btnRetomar.textContent = "⏳ Preparando...";
+
+    const uploadData = await reuploadFromStorage();
+    if (!uploadData) {
+      alert("Não foi possível restaurar a planilha. Faça upload manualmente.");
+      btnRetomar.disabled = false;
+      btnRetomar.textContent = "↩ Retomar do ponto onde parou";
+      return;
+    }
+
+    total = uploadData.total;
+    done  = ckpt.results.length;
+    ckptBanner.style.display = "none";
+    preview.style.display = "none";
+    await startExecution(ckpt.results);
+  });
+
+  btnDiscardCkpt.addEventListener("click", () => {
+    clearCkpt();
+    ckptBanner.style.display = "none";
+  });
 
   // ── Upload ────────────────────────────────────────────────────────────────
   uploadZone.addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", () => {
     if (fileInput.files[0]) uploadFile(fileInput.files[0]);
   });
-
   uploadZone.addEventListener("dragover", e => { e.preventDefault(); uploadZone.classList.add("drag"); });
   uploadZone.addEventListener("dragleave", () => uploadZone.classList.remove("drag"));
   uploadZone.addEventListener("drop", e => {
@@ -328,6 +451,9 @@
   });
 
   async function uploadFile(file) {
+    // Salva o arquivo no localStorage para poder re-fazer upload em caso de cold start
+    await saveFileToStorage(file);
+
     const fd = new FormData();
     fd.append("file", file);
     try {
@@ -341,6 +467,10 @@
         .map(r => `<li>${r.processo} — ${r.nome}${r.telefone ? " · " + r.telefone : ""}</li>`)
         .join("") + (data.total > 5 ? `<li>... e mais ${data.total - 5}</li>` : "");
 
+      // Se havia um checkpoint de outra planilha, limpar
+      clearCkpt();
+      ckptBanner.style.display = "none";
+
       preview.style.display = "block";
       btnExecute.disabled = false;
     } catch (e) {
@@ -349,24 +479,36 @@
   }
 
   // ── Execute ───────────────────────────────────────────────────────────────
-  btnExecute.addEventListener("click", async () => {
+  btnExecute.addEventListener("click", () => startExecution([]));
+
+  async function startExecution(previousResults) {
     btnExecute.disabled = true;
     btnReset.disabled   = true;
-    logSection.style.display = "block";
+    logSection.style.display  = "block";
     progressWrap.style.display = "block";
     downloadSection.style.display = "none";
     logBox.innerHTML = "";
-    done = 0;
     updateProgress();
 
     try {
-      const res = await fetch("/execute", { method: "POST" });
+      const res = await fetch("/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ previous_results: previousResults }),
+      });
       const data = await res.json();
       if (!res.ok) {
         appendLog("Erro: " + (data.erro || data.error || JSON.stringify(data)), "error");
         btnExecute.disabled = false;
         btnReset.disabled   = false;
         return;
+      }
+      // Atualiza totais vindos do servidor (garante consistência)
+      total = data.total;
+      done  = data.already_done || previousResults.length;
+      updateProgress();
+      if (data.already_done > 0) {
+        appendLog(`↩ Retomando: ${data.already_done} processo(s) já concluídos, processando os ${data.remaining} restantes...`, "info");
       }
       runControls.style.display = "flex";
       isPaused = false;
@@ -378,8 +520,9 @@
       btnExecute.disabled = false;
       btnReset.disabled   = false;
     }
-  });
+  }
 
+  // ── SSE ───────────────────────────────────────────────────────────────────
   function startSSE() {
     if (evtSource) evtSource.close();
     sseRunning = true;
@@ -398,7 +541,12 @@
       }
       if (data.msg) {
         appendLog(data.msg, data.status);
-        if (data.status === "ok" || data.status === "error") {
+      }
+      if (data.checkpoint) {
+        if (data.checkpoint._clear) {
+          clearCkpt();    // automação concluída — limpa checkpoint
+        } else {
+          saveCkpt(data.checkpoint);
           done++;
           updateProgress();
         }
@@ -407,14 +555,13 @@
 
     evtSource.onerror = () => {
       evtSource.close();
-      if (!sseRunning) return;   // encerramento normal, não reconectar
+      if (!sseRunning) return;
       appendLog("⚠️ Conexão com o log perdida — reconectando em 4s...", "warn");
       setTimeout(async () => {
         if (!sseRunning) return;
-        // Verifica no servidor se a automação já terminou enquanto estava desconectado
         try {
           const res = await fetch("/status");
-          const s = await res.json();
+          const s   = await res.json();
           if (s.done) {
             sseRunning = false;
             btnReset.disabled = false;
@@ -423,8 +570,6 @@
             appendLog("✅ Automação concluída (detectado ao reconectar).", "done");
             return;
           }
-          // Sincroniza contagem de processos concluídos
-          if (typeof s.done_count === "number") { done = s.done_count; updateProgress(); }
         } catch (_) {}
         appendLog("🔄 Reconectando ao log...", "info");
         startSSE();
@@ -444,42 +589,39 @@
     if (!total) return;
     const pct = Math.round((done / total) * 100);
     progressFill.style.width = pct + "%";
-    progressText.textContent = total ? `${done} / ${total}` : "";
+    progressText.textContent = `${done} / ${total}`;
   }
 
   // ── Pause / Resume ────────────────────────────────────────────────────────
   btnPause.addEventListener("click", async () => {
     isPaused = !isPaused;
-    const route = isPaused ? "/pause" : "/resume";
-    await fetch(route, { method: "POST" });
+    await fetch(isPaused ? "/pause" : "/resume", { method: "POST" });
     btnPause.textContent = isPaused ? "▶️ Retomar" : "⏸ Pausar";
     btnPause.classList.toggle("paused", isPaused);
   });
 
   // ── Relatório parcial ─────────────────────────────────────────────────────
-  btnPartial.addEventListener("click", () => {
-    window.open("/partial-report", "_blank");
-  });
+  btnPartial.addEventListener("click", () => window.open("/partial-report", "_blank"));
 
   // ── Reset ─────────────────────────────────────────────────────────────────
   btnReset.addEventListener("click", () => {
     sseRunning = false;
     if (evtSource) evtSource.close();
     fileInput.value = "";
-    preview.style.display   = "none";
-    logSection.style.display = "none";
-    runControls.style.display = "none";
+    preview.style.display        = "none";
+    ckptBanner.style.display     = "none";
+    logSection.style.display     = "none";
+    runControls.style.display    = "none";
     downloadSection.style.display = "none";
     progressFill.style.width = "0%";
     logBox.innerHTML = "";
     btnExecute.disabled = true;
     done = 0; total = 0; isPaused = false;
+    clearCkpt();
   });
 
   // ── Download final ────────────────────────────────────────────────────────
-  btnDownload.addEventListener("click", () => {
-    window.location.href = "/download";
-  });
+  btnDownload.addEventListener("click", () => { window.location.href = "/download"; });
 </script>
 </body>
 </html>

@@ -148,23 +148,41 @@ def execute():
     except ValueError as e:
         return jsonify({"erro": str(e)}), 400
 
+    # Checkpoint: resultados anteriores enviados pelo browser (localStorage)
+    req_data         = request.get_json(silent=True) or {}
+    previous_results = req_data.get("previous_results", [])
+    skip_set         = {str(r.get("numero_processo", "")) for r in previous_results}
+    rows_to_process  = [r for r in rows if str(r.get("numero_processo", "")) not in skip_set]
+    already_done     = len(previous_results)
+    total_original   = len(rows)
+
     # Diretório de saída para este session_id
     out_dir = OUTPUT_DIR / sid
     out_dir.mkdir(parents=True, exist_ok=True)
     report_path = out_dir / "relatorio_prepostos.xlsx"
 
-    # Reset state
+    # Reset state — pré-popula com resultados anteriores
     while not _log_queue.empty():
         _log_queue.get_nowait()
-    _state.update({"running": True, "done": False, "report_ready": False,
-                   "session_id": sid, "paused": False, "results": []})
+    _state.update({
+        "running": True, "done": False, "report_ready": False,
+        "session_id": sid, "paused": False,
+        "results": list(previous_results),
+        "total_original": total_original,
+        "already_done": already_done,
+    })
 
     thread = threading.Thread(
-        target=_run, args=(rows, report_path), daemon=True
+        target=_run, args=(rows_to_process, report_path, list(previous_results)), daemon=True
     )
     _state["thread"] = thread
     thread.start()
-    return jsonify({"ok": True, "total": len(rows)})
+    return jsonify({
+        "ok": True,
+        "total": total_original,
+        "remaining": len(rows_to_process),
+        "already_done": already_done,
+    })
 
 
 @app.route("/logs")
@@ -310,13 +328,16 @@ def _parse_spreadsheet(path: Path) -> list[dict]:
     return records
 
 
-def _log(msg: str, status: str | None = None):
-    _log_queue.put(json.dumps({"msg": msg, "status": status}))
+def _log(msg: str, status: str | None = None, checkpoint: dict | None = None):
+    payload: dict = {"msg": msg, "status": status}
+    if checkpoint:
+        payload["checkpoint"] = checkpoint
+    _log_queue.put(json.dumps(payload))
 
 
-def _run(rows: list[dict], report_path: Path):
+def _run(rows: list[dict], report_path: Path, preloaded_results: list | None = None):
     try:
-        rpa_module.run_automation(rows, _log, report_path, _state)
+        rpa_module.run_automation(rows, _log, report_path, _state, preloaded_results or [])
         _state["report_ready"] = True
     except Exception:
         _log(f"Erro crítico:\n{traceback.format_exc()}", "error")
