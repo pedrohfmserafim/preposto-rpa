@@ -397,26 +397,80 @@
   }
 
   // ── Verificação de checkpoint ao carregar a página ────────────────────────
-  window.addEventListener("load", () => {
-    const ckpt = loadCkpt();
+  window.addEventListener("load", async () => {
+    const ckpt    = loadCkpt();
     const hasFile = !!localStorage.getItem(FILE_KEY);
-    if (ckpt && ckpt.results && ckpt.results.length > 0 && hasFile) {
-      const done_n  = ckpt.results.length;
-      const total_n = ckpt.total || "?";
-      ckptTitle.textContent =
-        `⚡ Execução anterior interrompida: ${done_n} de ${total_n} processos concluídos.` +
-        ` Clique em "Retomar" para continuar de onde parou — sem precisar subir a planilha novamente.`;
-      ckptBanner.style.display = "block";
+    if (!ckpt || !ckpt.results || ckpt.results.length === 0 || !hasFile) return;
+
+    // Consulta o estado atual do servidor
+    let serverState = null;
+    try {
+      const res = await fetch("/status");
+      serverState = await res.json();
+    } catch (_) { return; }  // servidor ainda subindo — não faz nada
+
+    if (serverState.running) {
+      // Servidor está rodando (não houve cold start) — só reconecta o log
+      total = serverState.total_original || ckpt.total || 0;
+      done  = (serverState.already_done || 0) + (serverState.results || []).length;
+      logSection.style.display   = "block";
+      progressWrap.style.display = "block";
+      runControls.style.display  = "flex";
+      btnReset.disabled = true;
+      updateProgress();
+      appendLog("🔄 Reconectando ao log da execução em andamento...", "info");
+      startSSE();
+      return;
     }
+
+    if (!serverState.session_id) {
+      // session_id nulo = cold start — retoma automaticamente
+      await _autoResume(ckpt);
+      return;
+    }
+
+    // Servidor tem sessão encerrada e há checkpoint — mostra banner como fallback
+    const done_n  = ckpt.results.length;
+    const total_n = ckpt.total || "?";
+    ckptTitle.textContent =
+      `⚡ Execução anterior interrompida: ${done_n} de ${total_n} processos concluídos.` +
+      ` Clique em "Retomar" para continuar de onde parou.`;
+    ckptBanner.style.display = "block";
   });
+
+  async function _autoResume(ckpt) {
+    const done_n  = ckpt.results.length;
+    const total_n = ckpt.total || "?";
+
+    // Mostra o log imediatamente para o usuário ver o que está acontecendo
+    logSection.style.display   = "block";
+    progressWrap.style.display = "block";
+    btnReset.disabled = true;
+    appendLog(`⚡ Execução anterior detectada: ${done_n}/${total_n} processos já concluídos.`, "info");
+    appendLog("🔄 Retomando automaticamente...", "info");
+
+    const uploadData = await reuploadFromStorage();
+    if (!uploadData) {
+      appendLog("❌ Não foi possível restaurar a planilha automaticamente.", "error");
+      appendLog("   Faça upload da planilha manualmente para continuar.", "warn");
+      btnReset.disabled = false;
+      // Mostra banner manual como fallback
+      ckptTitle.textContent = `⚡ ${done_n}/${total_n} processos concluídos. Faça upload da planilha e clique em Retomar.`;
+      ckptBanner.style.display = "block";
+      return;
+    }
+
+    total = uploadData.total;
+    done  = ckpt.results.length;
+    updateProgress();
+    await startExecution(ckpt.results);
+  }
 
   btnRetomar.addEventListener("click", async () => {
     const ckpt = loadCkpt();
     if (!ckpt) { alert("Checkpoint expirado. Faça upload da planilha."); return; }
-
     btnRetomar.disabled = true;
     btnRetomar.textContent = "⏳ Preparando...";
-
     const uploadData = await reuploadFromStorage();
     if (!uploadData) {
       alert("Não foi possível restaurar a planilha. Faça upload manualmente.");
@@ -424,11 +478,10 @@
       btnRetomar.textContent = "↩ Retomar do ponto onde parou";
       return;
     }
-
     total = uploadData.total;
     done  = ckpt.results.length;
     ckptBanner.style.display = "none";
-    preview.style.display = "none";
+    preview.style.display    = "none";
     await startExecution(ckpt.results);
   });
 
