@@ -2,6 +2,29 @@ services:
   - type: web
     name: preposto-rpa
     env: python
+    branch: main
+    buildCommand: bash build.sh
+    startCommand: gunicorn app:app --timeout 600 --workers 1 --threads 4 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: APP_USER
+        sync: false
+      - key: APP_PASS
+        sync: false
+      - key: ELAW_USER
+        sync: false
+      - key: ELAW_PASS
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: /opt/render/project/src/.playwright-browsers
+
+  - type: web
+    name: preposto-rpa-dev
+    env: python
+    branch: dev
     buildCommand: bash build.sh
     startCommand: gunicorn app:app --timeout 600 --workers 1 --threads 4 --bind 0.0.0.0:$PORT
     envVars:
