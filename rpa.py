@@ -236,22 +236,62 @@ def _auto_login(page, log):
     # Espera os campos estarem prontos (headless pode renderizar após domcontentloaded)
     page.wait_for_selector("#username", state="visible", timeout=PAGE_TIMEOUT)
     page.wait_for_selector("#authKey",  state="visible", timeout=PAGE_TIMEOUT)
+    time.sleep(1)  # aguarda PrimeFaces inicializar os handlers de evento
 
     log("Preenchendo credenciais Elaw...")
-    page.fill("#username", elaw_user, timeout=PAGE_TIMEOUT)
-    page.fill("#authKey",  elaw_pass, timeout=PAGE_TIMEOUT)
 
-    # Tentar clicar com force=True (ignora checagens de visibilidade do Playwright)
+    # Preenche via JS e dispara eventos que o PrimeFaces escuta
+    page.evaluate(f"""(() => {{
+        function fillField(id, value) {{
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.focus();
+            el.value = value;
+            ['input', 'change', 'blur'].forEach(ev =>
+                el.dispatchEvent(new Event(ev, {{ bubbles: true }}))
+            );
+        }}
+        fillField('username', {repr(elaw_user)});
+        fillField('authKey',  {repr(elaw_pass)});
+    }})()""")
+    time.sleep(0.5)
+
+    # Confirma que os campos foram preenchidos
+    filled_user = page.input_value("#username")
+    filled_pass = page.input_value("#authKey")
+    if not filled_user or not filled_pass:
+        # Fallback: fill nativo do Playwright
+        page.fill("#username", elaw_user)
+        page.fill("#authKey",  elaw_pass)
+        time.sleep(0.3)
+
+    log("Submetendo login...")
+
+    # Método 1: click com force=True no botão
+    submitted = False
     try:
-        page.locator("button.ui-button").first.click(force=True, timeout=PAGE_TIMEOUT)
+        page.locator("button.ui-button").first.click(force=True, timeout=5_000)
+        submitted = True
     except Exception:
-        # Fallback: submeter via JS
+        pass
+
+    # Método 2: Enter no campo de senha (simula usuário pressionando Enter)
+    if not submitted:
+        try:
+            page.locator("#authKey").press("Enter")
+            submitted = True
+        except Exception:
+            pass
+
+    # Método 3: clique JS no botão com texto "Acessar"
+    if not submitted:
         page.evaluate("""(() => {
             const btn = document.querySelector('button.ui-button') ||
                         Array.from(document.querySelectorAll('button'))
-                            .find(b => b.textContent.trim().includes('Acessar'));
-            if (btn) btn.click();
-            else { const f = document.querySelector('form'); if (f) f.submit(); }
+                            .find(b => b.textContent.trim().toLowerCase().includes('acessar'));
+            if (btn) { btn.click(); return; }
+            const f = document.querySelector('form');
+            if (f) f.submit();
         })()""")
 
     page.wait_for_load_state("networkidle", timeout=30_000)
